@@ -41,6 +41,7 @@
 - `step1_log_events.json`
 - `step1_log_events.txt`
 - `step1_log_summary.json`
+- `step1_dropped_invalid_value.txt`（记录被过滤掉的空值/非法 value）
 
 对应关键位置：
 
@@ -162,6 +163,7 @@ py -3 step3_align_and_prepare_dataset.py
   - `step1_log_events.json`
   - `step1_log_events.txt`
   - `step1_log_summary.json`
+  - `step1_dropped_invalid_value.txt`
 - Step 2
   - `step2_apc_state_raw.txt`
   - `step2_apc_summary.json`

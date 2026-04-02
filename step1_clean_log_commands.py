@@ -68,6 +68,17 @@ def parse_log_line(line: str) -> Optional[Union[Dict[str, object], List[Dict[str
     return None
 
 
+def classify_value_drop_reason(raw_value: object) -> str:
+    if raw_value is None:
+        return "value_missing"
+
+    raw_text = str(raw_value).strip().lower()
+    if raw_text in {"", "none", "null", "nan"}:
+        return "value_missing"
+
+    return "value_not_numeric"
+
+
 def main() -> None:
     log_dir = pathlib.Path(C.LOG_INPUT_DIR)
     if not log_dir.exists():
@@ -116,10 +127,17 @@ def main() -> None:
 
     df = pd.DataFrame(all_rows)
     df["timestamp"] = robust_to_datetime(df["timestamp"])
-    df = df[df["timestamp"].notna()].copy()
     df["instrument"] = df["instrument"].astype(str).str.strip()
+    df["raw_value"] = df["value"]
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    dropped_value_df = df[df["value"].isna()].copy()
+    dropped_value_df["drop_reason"] = dropped_value_df["raw_value"].apply(classify_value_drop_reason)
+    dropped_value_df = dropped_value_df[["timestamp", "instrument", "action", "raw_value", "drop_reason"]]
+    dropped_value_df.to_csv(C.STEP1_DROPPED_VALUE_PATH, index=False, sep="\t")
+
+    df = df[df["timestamp"].notna()].copy()
     df = df[df["instrument"].ne("") & df["value"].notna()].copy()
+    df = df.drop(columns=["raw_value"])
     df = df.sort_values("timestamp").reset_index(drop=True)
 
     with open(C.STEP1_JSON_PATH, "w", encoding="utf-8") as f:
@@ -134,10 +152,14 @@ def main() -> None:
         "failed_files_count": len(failed_files),
         "locked_files": locked_files,
         "failed_files": failed_files,
+        "dropped_invalid_value_rows": int(len(dropped_value_df)),
+        "dropped_missing_value_rows": int((dropped_value_df["drop_reason"] == "value_missing").sum()),
+        "dropped_non_numeric_value_rows": int((dropped_value_df["drop_reason"] == "value_not_numeric").sum()),
         "event_rows": int(len(df)),
         "outputs": {
             "json": str(C.STEP1_JSON_PATH),
             "txt": str(C.STEP1_TXT_PATH),
+            "dropped_invalid_value_txt": str(C.STEP1_DROPPED_VALUE_PATH),
         },
     }
     with open(C.STEP1_SUMMARY_PATH, "w", encoding="utf-8") as f:
