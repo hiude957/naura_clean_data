@@ -1,0 +1,25 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments and local tooling
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.codex
+
+# Local raw/anonymized inputs and generated datasets
+anonymized*/
+anonymized(0316~0407)/
+aligned_output*/
+raw/
+output/
+outputs/
+
+# Logs and OS files
+*.log
+.DS_Store

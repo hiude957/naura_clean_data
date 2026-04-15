@@ -192,7 +192,7 @@ def normalize_day_name(name: str) -> str:
     raw_name = str(name).strip()
     if DAY_DIR_REGEX.fullmatch(raw_name):
         return raw_name
-    safe_name = re.sub(r"[^0-9A-Za-z_-]+", "_", raw_name).strip("_")
+    safe_name = re.sub(r"[^\w-]+", "_", raw_name, flags=re.UNICODE).strip("_-")
     return safe_name or "current_day"
 
 
@@ -203,25 +203,74 @@ def discover_input_days(root: str | Path) -> Tuple[InputDay, ...]:
 
     selected_days = {str(day).strip() for day in PROCESS_DAYS if str(day).strip()}
     day_dirs: List[InputDay] = []
+    non_date_dirs: List[InputDay] = []
+    seen_day_names: Dict[str, Path] = {}
+
+    print(f"[INFO][DISCOVER] scanning input root: {root_path}")
 
     for child in sorted(root_path.iterdir()):
         if not child.is_dir():
             continue
-        if not DAY_DIR_REGEX.fullmatch(child.name):
+        normalized_day = normalize_day_name(child.name)
+        matches_filter = (
+            not selected_days
+            or child.name in selected_days
+            or normalized_day in selected_days
+        )
+        if not matches_filter:
+            print(
+                f"[INFO][DISCOVER] skip directory not in PROCESS_DAYS: "
+                f"name={child.name}, normalized_day={normalized_day}"
+            )
             continue
-        if selected_days and child.name not in selected_days:
-            continue
-        day_dirs.append(InputDay(day=child.name, path=child))
+
+        existing_path = seen_day_names.get(normalized_day)
+        if existing_path is not None and existing_path != child:
+            raise ValueError(
+                "Duplicate normalized day name detected. "
+                f"Directories '{existing_path.name}' and '{child.name}' both map to '{normalized_day}'."
+            )
+        seen_day_names[normalized_day] = child
+
+        input_day = InputDay(day=normalized_day, path=child)
+        if DAY_DIR_REGEX.fullmatch(child.name):
+            day_dirs.append(input_day)
+        else:
+            non_date_dirs.append(input_day)
+            print(
+                f"[INFO][DISCOVER] non-date directory accepted: "
+                f"name={child.name}, normalized_day={normalized_day}"
+            )
 
     if day_dirs:
-        return tuple(day_dirs)
+        discovered = tuple([*day_dirs, *non_date_dirs])
+        print(
+            f"[INFO][DISCOVER] discovered {len(discovered)} input directories under {root_path}"
+        )
+        return discovered
+
+    if non_date_dirs:
+        print(
+            f"[INFO][DISCOVER] no YYYYMMDD directories found, "
+            f"falling back to {len(non_date_dirs)} non-date directories under {root_path}"
+        )
+        return tuple(non_date_dirs)
 
     if any(item.is_file() for item in root_path.iterdir()):
         day = normalize_day_name(root_path.name)
-        if selected_days and day not in selected_days:
+        if selected_days and root_path.name not in selected_days and day not in selected_days:
+            print(
+                f"[INFO][DISCOVER] root files found but root directory filtered out by PROCESS_DAYS: "
+                f"name={root_path.name}, normalized_day={day}"
+            )
             return tuple()
+        print(
+            f"[INFO][DISCOVER] using root directory as a single input day: "
+            f"name={root_path.name}, normalized_day={day}"
+        )
         return (InputDay(day=day, path=root_path),)
 
+    print(f"[INFO][DISCOVER] no usable input directories or files found under {root_path}")
     return tuple()
 
 
